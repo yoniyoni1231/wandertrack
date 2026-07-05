@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WanderTrack — Travel &amp; Visa Tracker</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-globe">🌍</span>
+        <div>
+          <h1>WanderTrack</h1>
+          <p class="tagline">Your world, your days, your visas</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div id="current-location-chip" class="location-chip" hidden></div>
+        <button id="btn-checkin" class="btn btn-checkin">📍 I'm here now</button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="map">🗺️ <span>Map</span></button>
+    <button class="tab" data-tab="calendar">📅 <span>Calendar</span></button>
+    <button class="tab" data-tab="trips">🧳 <span>Trips</span></button>
+    <button class="tab" data-tab="visas">🛂 <span>Visas</span></button>
+    <button class="tab" data-tab="settings">⚙️ <span>Settings</span></button>
+  </nav>
+
+  <main>
+    <!-- ============ MAP ============ -->
+    <section id="tab-map" class="tab-panel active">
+      <div id="stats-row" class="stats-row"></div>
+      <div class="card map-card">
+        <div id="world-map-container" class="map-container"></div>
+        <div id="map-tooltip" class="map-tooltip" hidden></div>
+        <p class="map-hint">Click a country for details · colored countries are places you've been</p>
+      </div>
+      <div id="top-countries" class="card"></div>
+    </section>
+
+    <!-- ============ CALENDAR ============ -->
+    <section id="tab-calendar" class="tab-panel">
+      <div class="card">
+        <div class="cal-header">
+          <button id="cal-prev" class="btn btn-ghost">‹</button>
+          <h2 id="cal-title"></h2>
+          <button id="cal-next" class="btn btn-ghost">›</button>
+          <button id="cal-today" class="btn btn-ghost btn-small">Today</button>
+        </div>
+        <div class="cal-grid cal-dow">
+          <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+        </div>
+        <div id="cal-grid" class="cal-grid"></div>
+        <p class="map-hint">Click any day to set which country you were in</p>
+        <div id="cal-legend" class="cal-legend"></div>
+      </div>
+    </section>
+
+    <!-- ============ TRIPS ============ -->
+    <section id="tab-trips" class="tab-panel">
+      <div class="section-head">
+        <h2>My trips</h2>
+        <button id="btn-add-trip" class="btn btn-primary">＋ Add trip</button>
+      </div>
+      <div id="trips-list"></div>
+    </section>
+
+    <!-- ============ VISAS ============ -->
+    <section id="tab-visas" class="tab-panel">
+      <div class="disclaimer">
+        ⚠️ Visa rules change often. The numbers here are your own records plus best-effort
+        suggestions — always double-check with official sources before you travel.
+      </div>
+      <div class="section-head">
+        <h2>Visa tracking</h2>
+        <button id="btn-add-visa" class="btn btn-primary">＋ Add visa</button>
+      </div>
+      <div id="visas-list" class="visa-grid"></div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section id="tab-settings" class="tab-panel">
+      <div class="card">
+        <h2>Profile</h2>
+        <label class="field">
+          <span>Passport country</span>
+          <select id="setting-passport"></select>
+        </label>
+        <p class="muted">Used to suggest visa rules when you check in to a country.
+          Currently preloaded rules are for the Israeli passport.</p>
+      </div>
+      <div class="card">
+        <h2>Your data</h2>
+        <p class="muted">Everything is saved on this device in your browser. Export a backup
+          regularly — it's also how you'll move your data when the app goes online.</p>
+        <div class="btn-row">
+          <button id="btn-export" class="btn btn-primary">⬇️ Export backup</button>
+          <label class="btn btn-secondary" for="import-file">⬆️ Import backup</label>
+          <input type="file" id="import-file" accept=".json" hidden>
+        </div>
+      </div>
+      <div class="card danger-zone">
+        <h2>Danger zone</h2>
+        <button id="btn-clear" class="btn btn-danger">🗑️ Delete all data</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="modal-root"></div>
+
+  <script src="js/data/world-map.js"></script>
+  <script src="js/data/visa-rules.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/logic.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
