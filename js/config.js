@@ -8,5 +8,5 @@
 // Leave both empty to run the app fully offline.
 // ============================================================
 
-const SUPABASE_URL = '';
-const SUPABASE_ANON_KEY = '';
+const SUPABASE_URL = 'https://qgdxyhpjivuisoigviyr.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFnZHh5aHBqaXZ1aXNvaWd2aXlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzMjQwODIsImV4cCI6MjA5ODkwMDA4Mn0.GvPjIIPkgjXSpeuAfoUhhP8VulJvLsBuxUZNEtuQPo8';
