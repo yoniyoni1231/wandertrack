@@ -3,7 +3,10 @@
 // ============================================================
 
 let state = Storage.load();
-function persist() { Storage.save(state); }
+function persist() {
+  Storage.save(state);
+  Cloud.pushSoon(state); // no-op when not logged in
+}
 
 // ---------- country catalogue (parsed from the map itself) ----------
 const COUNTRIES = {};
@@ -574,6 +577,87 @@ function openVisaModal(visa) {
 }
 
 // ============================================================
+// ACCOUNT / CLOUD SYNC
+// ============================================================
+function renderAccountCard() {
+  const card = document.getElementById('account-card');
+  if (!card) return;
+
+  if (!Cloud.configured()) {
+    card.innerHTML = `
+      <h2>☁️ Cloud sync</h2>
+      <p class="muted">Not set up yet. Once connected to a (free) Supabase project, you'll be able
+      to log in from your phone and laptop and see the same data everywhere.</p>`;
+    return;
+  }
+  if (Cloud.syncState === 'off') {
+    card.innerHTML = `
+      <h2>☁️ Cloud sync</h2>
+      <p class="muted">Couldn't load the sync library — check your internet connection.
+      Your data is still saved on this device.</p>`;
+    return;
+  }
+
+  if (!Cloud.user) {
+    card.innerHTML = `
+      <h2>☁️ Cloud sync — log in</h2>
+      <p class="muted">Log in to keep your trips and visas synced across all your devices.</p>
+      <label class="field"><span>Email</span><input type="email" id="acc-email" autocomplete="email"></label>
+      <label class="field"><span>Password</span><input type="password" id="acc-pass" autocomplete="current-password"></label>
+      <div class="btn-row" style="justify-content:flex-start">
+        <button class="btn btn-primary" id="acc-signin">Log in</button>
+        <button class="btn btn-secondary" id="acc-signup">Create account</button>
+      </div>
+      <p class="muted" id="acc-msg"></p>`;
+    const msg = card.querySelector('#acc-msg');
+    const creds = () => ({
+      email: card.querySelector('#acc-email').value.trim(),
+      pass: card.querySelector('#acc-pass').value,
+    });
+    card.querySelector('#acc-signin').onclick = async () => {
+      const { email, pass } = creds();
+      if (!email || !pass) { msg.textContent = 'Enter email and password.'; return; }
+      msg.textContent = 'Logging in…';
+      try { await Cloud.signIn(email, pass); msg.textContent = ''; }
+      catch (e) { msg.textContent = '❌ ' + e.message; }
+    };
+    card.querySelector('#acc-signup').onclick = async () => {
+      const { email, pass } = creds();
+      if (!email || !pass) { msg.textContent = 'Enter email and a password (min 6 characters).'; return; }
+      msg.textContent = 'Creating account…';
+      try {
+        const r = await Cloud.signUp(email, pass);
+        msg.textContent = r === 'confirm-email'
+          ? '📧 Check your email and click the confirmation link, then log in here.'
+          : '';
+      } catch (e) { msg.textContent = '❌ ' + e.message; }
+    };
+    return;
+  }
+
+  const status =
+    Cloud.syncState === 'syncing' ? '🔄 Syncing…' :
+    Cloud.syncState === 'error' ? `⚠️ Sync problem: ${Cloud._statusMsg}` :
+    Cloud.lastSyncedAt ? `✅ Synced · ${new Date(Cloud.lastSyncedAt).toLocaleString()}` : '✅ Connected';
+  card.innerHTML = `
+    <h2>☁️ Cloud sync</h2>
+    <p><b>${Cloud.user.email}</b></p>
+    <p class="muted">${status}</p>
+    <div class="btn-row" style="justify-content:flex-start">
+      <button class="btn btn-secondary" id="acc-syncnow">🔄 Sync now</button>
+      <button class="btn btn-danger" id="acc-signout">Log out</button>
+    </div>`;
+  card.querySelector('#acc-syncnow').onclick = async () => {
+    await Cloud.push(state);
+    await Cloud.pullIfNewer();
+  };
+  card.querySelector('#acc-signout').onclick = async () => {
+    await Cloud.signOut();
+    renderAccountCard();
+  };
+}
+
+// ============================================================
 // SETTINGS
 // ============================================================
 function initSettings() {
@@ -639,6 +723,8 @@ function init() {
   initTabs();
   initMap();
   initSettings();
+  Cloud.init();
+  renderAccountCard();
   document.getElementById('btn-checkin').onclick = () => openCheckInModal();
   document.getElementById('btn-add-trip').onclick = () => openTripModal();
   document.getElementById('btn-add-visa').onclick = () => openVisaModal();
