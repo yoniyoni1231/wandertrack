@@ -277,6 +277,72 @@ function normalizeStays(state) {
   state.stays = merged;
 }
 
+// ---------- trip planning (simulator) ----------
+// Timeline used for planning: real stays (ongoing ones capped at
+// today — we assume you leave before a planned trip starts) plus
+// all planned stays except the one being evaluated.
+function planningStays(stays, plans, excludePlanId) {
+  const list = stays.map((s) => ({ country: s.country, start: s.start, end: s.end || todayISO() }));
+  for (const p of plans || []) {
+    if (p.id !== excludePlanId) list.push({ country: p.country, start: p.start, end: p.end });
+  }
+  return list;
+}
+
+// Entering `startDate` and staying continuously in a country of
+// `countrySet`, the last date you may stay without exceeding
+// `limitDays` within any rolling `windowDays` window, given the
+// other recorded/planned presence in `staysList`.
+function maxStayFromDate(staysList, countrySet, limitDays, windowDays, startDate) {
+  const horizon = limitDays + windowDays + 5;
+  let date = startDate;
+  for (let i = 0; i < horizon; i++) {
+    const winStart = addDays(date, -(windowDays - 1));
+    const dayMap = buildDayMap(staysList, date);
+    let used = 0;
+    for (let d = winStart; d <= date; d = addDays(d, 1)) {
+      const rec = dayMap.get(d);
+      const present = (d >= startDate && d <= date) ||
+        (rec && [...rec].some((c) => countrySet.has(c)));
+      if (present) used++;
+    }
+    if (used > limitDays) return addDays(date, -1);
+    date = addDays(date, 1);
+  }
+  return addDays(startDate, horizon - 1);
+}
+
+// Evaluate one planned stay against real history + other plans.
+// `rule` handling mirrors the visa cards: a tracked visa wins,
+// otherwise the suggested rule for the passport.
+function evaluatePlan(state, plan) {
+  const tracked = state.visas.find((v) =>
+    v.country === plan.country || (v.country === 'schengen' && SCHENGEN_COUNTRIES.has(plan.country)));
+  const rule = tracked || suggestVisaRule(plan.country);
+  const others = planningStays(state.stays, state.plans, plan.id);
+  const len = daySpan(plan.start, plan.end);
+  let maxEnd;
+  if (SCHENGEN_COUNTRIES.has(plan.country)) {
+    maxEnd = maxStayFromDate(others, SCHENGEN_COUNTRIES, SCHENGEN_DAYS, SCHENGEN_WINDOW, plan.start);
+  } else if (rule.type === 'rolling') {
+    maxEnd = maxStayFromDate(others, new Set([plan.country]), rule.days, rule.windowDays || 180, plan.start);
+  } else {
+    // perEntry / visaRequired: fixed allowance from entry.
+    maxEnd = addDays(plan.start, rule.days - 1);
+  }
+  const allowed = maxEnd >= plan.start ? daySpan(plan.start, maxEnd) : 0;
+  return {
+    rule,
+    ruleTracked: !!tracked,
+    isSchengen: SCHENGEN_COUNTRIES.has(plan.country),
+    len,
+    maxEnd,
+    allowed,
+    ok: plan.end <= maxEnd,
+    overBy: plan.end > maxEnd ? daySpan(maxEnd, plan.end) - 1 : 0,
+  };
+}
+
 // ---------- stats ----------
 function travelStats(stays) {
   const perCountry = daysPerCountry(stays);

@@ -127,6 +127,7 @@ function renderAll() {
   renderCalendar();
   renderTrips();
   renderVisas();
+  renderPlans();
 }
 
 // ---------- header ----------
@@ -507,6 +508,123 @@ function openTripModal(stay, prefillIso) {
 }
 
 // ============================================================
+// PLAN MODE (trip simulator)
+// ============================================================
+function renderPlans() {
+  const listEl = document.getElementById('plans-list');
+  if (!listEl) return;
+  const plans = [...(state.plans || [])].sort((a, b) => a.start.localeCompare(b.start));
+  if (!plans.length) {
+    listEl.innerHTML = `<div class="empty-note">🛫 Nothing planned yet.<br>
+      Add the countries you're dreaming about and I'll check them against your visa days.</div>`;
+    return;
+  }
+  listEl.innerHTML = plans.map((p) => {
+    const ev = evaluatePlan(state, p);
+    const verdict = ev.ok
+      ? `<span class="badge badge-ok">✓ FITS</span>`
+      : `<span class="badge badge-danger">✗ ${ev.overBy} DAY${ev.overBy === 1 ? '' : 'S'} OVER</span>`;
+    const ruleLabel = ev.isSchengen ? 'Schengen 90/180'
+      : ev.rule.type === 'rolling' ? `${ev.rule.days} in ${ev.rule.windowDays || 180} days`
+      : `${ev.rule.days} per entry`;
+    const detail = ev.ok
+      ? `${ev.len} of ${ev.allowed} allowed days from this date · latest exit ${fmtDate(ev.maxEnd)}`
+      : ev.allowed
+        ? `only ${ev.allowed} day${ev.allowed === 1 ? '' : 's'} allowed from this date — latest exit ${fmtDate(ev.maxEnd)}`
+        : `no days available on this date — days free up later`;
+    return `
+      <div class="trip-row ${ev.ok ? '' : 'plan-bad'}">
+        <div class="trip-flag">${countryFlag(p.country)}</div>
+        <div class="trip-main">
+          <div class="trip-country">${countryName(p.country)} ${verdict}</div>
+          <div class="trip-dates">${fmtDate(p.start)} → ${fmtDate(p.end)} (${ev.len} days)</div>
+          <div class="trip-dates">${detail} · rule: ${ruleLabel}${ev.ruleTracked ? '' : ' (suggested)'}</div>
+        </div>
+        <button class="icon-btn" data-pedit="${p.id}" title="Edit">✏️</button>
+        <button class="icon-btn" data-pdel="${p.id}" title="Delete">🗑️</button>
+      </div>`;
+  }).join('');
+  listEl.querySelectorAll('[data-pedit]').forEach((b) => {
+    b.onclick = () => openPlanModal(state.plans.find((p) => p.id === b.dataset.pedit));
+  });
+  listEl.querySelectorAll('[data-pdel]').forEach((b) => {
+    b.onclick = () => {
+      state.plans = state.plans.filter((p) => p.id !== b.dataset.pdel);
+      persist(); renderAll();
+    };
+  });
+}
+
+function openPlanModal(plan) {
+  const isEdit = !!plan;
+  const defaultStart = plan ? plan.start : todayISO();
+  const m = openModal(`
+    <h2>${isEdit ? '✏️ Edit planned trip' : '🛫 Plan a trip'}</h2>
+    <label class="field"><span>Country</span>${pickerHTML()}</label>
+    <div class="field-inline">
+      <label class="field"><span>Arrive</span><input type="date" id="plan-start" value="${defaultStart}"></label>
+      <label class="field"><span>Leave</span><input type="date" id="plan-end" value="${plan ? plan.end : ''}"></label>
+    </div>
+    <div id="plan-hint"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" data-act="cancel">Cancel</button>
+      <button class="btn btn-primary" data-act="save">Save plan</button>
+    </div>`);
+  const hintEl = m.el.querySelector('#plan-hint');
+  const startEl = m.el.querySelector('#plan-start');
+  const endEl = m.el.querySelector('#plan-end');
+  const picker = setupCountryPicker(m.el.querySelector('.country-picker'), updateHint);
+  if (plan) picker.value = plan.country;
+
+  function updateHint() {
+    const iso = picker.value;
+    const start = startEl.value;
+    if (!iso || iso === 'schengen' || !start) { hintEl.innerHTML = ''; return; }
+    const probe = {
+      id: plan ? plan.id : '_probe',
+      country: iso,
+      start,
+      end: endEl.value && endEl.value >= start ? endEl.value : start,
+    };
+    const ev = evaluatePlan(state, probe);
+    const ruleTxt = `rule: ${ev.isSchengen ? 'Schengen 90/180 (shared)' : describeRule(ev.rule)}${ev.ruleTracked ? '' : ' (suggested — verify)'}`;
+    if (!ev.allowed) {
+      hintEl.innerHTML = `
+        <div class="suggestion">
+          <h3>${countryFlag(iso)} <b class="sev-danger">No days available on ${fmtDate(start)}</b></h3>
+          <p class="muted">Your other trips and plans already fill the allowance — try a later date. ${ruleTxt}</p>
+        </div>`;
+      return;
+    }
+    const fits = endEl.value ? (ev.ok
+      ? `<b class="sev-ok">✓ Your dates fit.</b>`
+      : `<b class="sev-danger">✗ ${ev.overBy} day${ev.overBy === 1 ? '' : 's'} too long.</b>`) : '';
+    hintEl.innerHTML = `
+      <div class="suggestion">
+        <h3>${countryFlag(iso)} From ${fmtDate(start)} you can stay up to <b>${ev.allowed}</b> days</h3>
+        <p class="muted">Latest exit: <b>${fmtDate(ev.maxEnd)}</b> · ${ruleTxt}
+          ${fits ? '<br>' + fits : ''}</p>
+      </div>`;
+  }
+  startEl.onchange = updateHint;
+  endEl.onchange = updateHint;
+  if (plan) updateHint();
+
+  m.el.querySelector('[data-act="cancel"]').onclick = m.close;
+  m.el.querySelector('[data-act="save"]').onclick = () => {
+    const iso = picker.value;
+    const start = startEl.value;
+    const end = endEl.value;
+    if (!iso || iso === 'schengen') { alert('Pick a country.'); return; }
+    if (!start || !end) { alert('Pick arrival and leave dates.'); return; }
+    if (end < start) { alert('Leave date is before arrival date.'); return; }
+    if (isEdit) Object.assign(plan, { country: iso, start, end });
+    else state.plans.push({ id: newId(), country: iso, start, end });
+    persist(); renderAll(); m.close();
+  };
+}
+
+// ============================================================
 // VISAS
 // ============================================================
 function renderVisas() {
@@ -772,6 +890,7 @@ function init() {
   document.getElementById('btn-checkin').onclick = () => openCheckInModal();
   document.getElementById('btn-add-trip').onclick = () => openTripModal();
   document.getElementById('btn-add-visa').onclick = () => openVisaModal();
+  document.getElementById('btn-add-plan').onclick = () => openPlanModal();
   document.getElementById('cal-prev').onclick = () => {
     calCursor.m--; if (calCursor.m < 0) { calCursor.m = 11; calCursor.y--; } renderCalendar();
   };

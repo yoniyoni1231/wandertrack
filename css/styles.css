@@ -203,6 +203,8 @@ main { max-width: 1060px; margin: 0 auto; padding: 0 16px 70px; }
   width: 36px; height: 36px; font-size: 1rem;
 }
 .icon-btn:hover { background: var(--line); }
+.plan-bad { border: 1.5px solid #ffc2c2; background: #fff7f7; }
+.trip-country .badge { vertical-align: middle; margin-left: 4px; }
 .empty-note {
   text-align: center; color: var(--muted); padding: 40px 10px;
   background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);

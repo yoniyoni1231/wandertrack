@@ -20,6 +20,9 @@ const Storage = {
       // { id, country: 'th' | 'schengen', type, days, windowDays,
       //   entryDate, validTo, note }
       visas: [],
+      // plans: hypothetical future stays for the trip simulator.
+      // { id, country, start, end } — never mixed into real stats.
+      plans: [],
     };
   },
 
