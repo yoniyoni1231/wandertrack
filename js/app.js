@@ -122,6 +122,7 @@ function pickerHTML(placeholder) {
 // ============================================================
 function renderAll() {
   renderHeader();
+  renderCurrentStatus();
   renderStats();
   renderMapColors();
   renderCalendar();
@@ -140,6 +141,84 @@ function renderHeader() {
   } else {
     chip.hidden = true;
   }
+}
+
+// ---------- current stay box (main screen) ----------
+// Finds the visa that applies to the country you're in right now:
+// the country's own tracked visa, or the Schengen tracker for
+// Schengen countries (auto-created from stays if not saved yet).
+function visaForCountry(iso) {
+  const own = state.visas.find((v) => v.country === iso);
+  if (own) return own;
+  if (SCHENGEN_COUNTRIES.has(iso)) {
+    return state.visas.find((v) => v.country === 'schengen') || {
+      id: '_auto_schengen', country: 'schengen', type: 'schengen',
+      days: SCHENGEN_DAYS, windowDays: SCHENGEN_WINDOW,
+    };
+  }
+  return null;
+}
+
+function renderCurrentStatus() {
+  const box = document.getElementById('current-status');
+  if (!box) return;
+  const cur = currentStay(state.stays);
+
+  if (!cur) {
+    box.innerHTML = `
+      <div class="card current-status cs-empty">
+        <div class="cs-country">🏠 Not checked in</div>
+        <p class="muted">Tell the app where you are and it will count your days and visa allowance for you.</p>
+        <button class="btn btn-primary" id="cs-checkin">📍 I'm here now</button>
+      </div>`;
+    box.querySelector('#cs-checkin').onclick = () => openCheckInModal();
+    return;
+  }
+
+  const daysHere = daySpan(cur.start, todayISO());
+  const visa = visaForCountry(cur.country);
+  let visaHTML;
+  if (visa) {
+    const st = visaStatus(visa, state.stays);
+    const pct = Math.min(100, Math.round((st.used / st.total) * 100));
+    const leaveBy = visa.type === 'schengen'
+      ? schengenLastSafeDay(state.stays)
+      : (visa.type === 'perEntry' || visa.type === 'visaRequired')
+        ? addDays(visa.entryDate || cur.start, st.total - 1)
+        : null;
+    const badge = st.severity === 'danger'
+      ? '<span class="badge badge-danger">CHECK NOW</span>'
+      : st.severity === 'warn' ? '<span class="badge badge-warn">RUNNING LOW</span>'
+      : '<span class="badge badge-ok">OK</span>';
+    const visaName = visa.country === 'schengen' ? 'Schengen 90/180' : 'visa';
+    visaHTML = `
+      <div class="cs-visa">
+        <div class="cs-visa-line"><b class="sev-${st.severity}">${st.left} visa days left</b> ${badge}</div>
+        <div class="cs-bar"><div class="cs-bar-fill sevbg-${st.severity}" style="width:${Math.max(3, pct)}%"></div></div>
+        <div class="cs-sub">${st.used} of ${st.total} used (${visaName})${leaveBy ? ` · must leave by <b>${fmtDate(leaveBy)}</b>` : ''}</div>
+      </div>`;
+  } else {
+    visaHTML = `
+      <div class="cs-visa">
+        <div class="cs-visa-line muted">No visa tracked for this country</div>
+        <button class="btn btn-secondary btn-small" id="cs-addvisa">🛂 Track visa</button>
+      </div>`;
+  }
+
+  box.innerHTML = `
+    <div class="card current-status">
+      <div class="cs-left">
+        <div class="cs-flag">${countryFlag(cur.country)}</div>
+        <div>
+          <div class="cs-country">${countryName(cur.country)}</div>
+          <div class="cs-sub">since ${fmtDate(cur.start)}</div>
+        </div>
+      </div>
+      <div class="cs-days"><b>${daysHere}</b><span>day${daysHere === 1 ? '' : 's'} here</span></div>
+      ${visaHTML}
+    </div>`;
+  const addBtn = box.querySelector('#cs-addvisa');
+  if (addBtn) addBtn.onclick = () => openCheckInModal(cur.country);
 }
 
 // ---------- stats ----------
