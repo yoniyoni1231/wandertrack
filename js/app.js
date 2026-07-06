@@ -122,7 +122,6 @@ function pickerHTML(placeholder) {
 // ============================================================
 function renderAll() {
   renderHeader();
-  renderCurrentStatus();
   renderStats();
   renderMapColors();
   renderCalendar();
@@ -159,82 +158,48 @@ function visaForCountry(iso) {
   return null;
 }
 
-function renderCurrentStatus() {
-  const box = document.getElementById('current-status');
-  if (!box) return;
-  const cur = currentStay(state.stays);
-
-  if (!cur) {
-    box.innerHTML = `
-      <div class="card current-status cs-empty">
-        <div class="cs-country">🏠 Not checked in</div>
-        <p class="muted">Tell the app where you are and it will count your days and visa allowance for you.</p>
-        <button class="btn btn-primary" id="cs-checkin">📍 I'm here now</button>
-      </div>`;
-    box.querySelector('#cs-checkin').onclick = () => openCheckInModal();
-    return;
-  }
-
-  const daysHere = daySpan(cur.start, todayISO());
-  const visa = visaForCountry(cur.country);
-  let visaHTML;
-  if (visa) {
-    const st = visaStatus(visa, state.stays);
-    const pct = Math.min(100, Math.round((st.used / st.total) * 100));
-    const leaveBy = visa.type === 'schengen'
-      ? schengenLastSafeDay(state.stays)
-      : (visa.type === 'perEntry' || visa.type === 'visaRequired')
-        ? addDays(visa.entryDate || cur.start, st.total - 1)
-        : null;
-    const badge = st.severity === 'danger'
-      ? '<span class="badge badge-danger">CHECK NOW</span>'
-      : st.severity === 'warn' ? '<span class="badge badge-warn">RUNNING LOW</span>'
-      : '<span class="badge badge-ok">OK</span>';
-    const visaName = visa.country === 'schengen' ? 'Schengen 90/180' : 'visa';
-    visaHTML = `
-      <div class="cs-visa">
-        <div class="cs-visa-line"><b class="sev-${st.severity}">${st.left} visa days left</b> ${badge}</div>
-        <div class="cs-bar"><div class="cs-bar-fill sevbg-${st.severity}" style="width:${Math.max(3, pct)}%"></div></div>
-        <div class="cs-sub">${st.used} of ${st.total} used (${visaName})${leaveBy ? ` · must leave by <b>${fmtDate(leaveBy)}</b>` : ''}</div>
-      </div>`;
-  } else {
-    visaHTML = `
-      <div class="cs-visa">
-        <div class="cs-visa-line muted">No visa tracked for this country</div>
-        <button class="btn btn-secondary btn-small" id="cs-addvisa">🛂 Track visa</button>
-      </div>`;
-  }
-
-  box.innerHTML = `
-    <div class="card current-status">
-      <div class="cs-left">
-        <div class="cs-flag">${countryFlag(cur.country)}</div>
-        <div>
-          <div class="cs-country">${countryName(cur.country)}</div>
-          <div class="cs-sub">since ${fmtDate(cur.start)}</div>
-        </div>
-      </div>
-      <div class="cs-days"><b>${daysHere}</b><span>day${daysHere === 1 ? '' : 's'} here</span></div>
-      ${visaHTML}
-    </div>`;
-  const addBtn = box.querySelector('#cs-addvisa');
-  if (addBtn) addBtn.onclick = () => openCheckInModal(cur.country);
-}
-
 // ---------- stats ----------
 function renderStats() {
   const s = travelStats(state.stays);
   const cur = currentStay(state.stays);
   const pct = Math.min(100, Math.round((s.visited.size / 195) * 100));
+  // Card 3: days in the current country. Card 4: visa days left there.
+  let hereCard, visaCard;
+  if (cur) {
+    const daysHere = daySpan(cur.start, todayISO());
+    hereCard = {
+      accent: '#4aa8ff',
+      value: daysHere,
+      label: `day${daysHere === 1 ? '' : 's'} in ${countryName(cur.country)} ${countryFlag(cur.country)}`,
+      sub: `since ${fmtDate(cur.start)}`,
+    };
+    const visa = visaForCountry(cur.country);
+    if (visa) {
+      const st = visaStatus(visa, state.stays);
+      const sevColor = st.severity === 'danger' ? 'var(--danger)' : st.severity === 'warn' ? 'var(--warn)' : 'var(--ok)';
+      const leaveBy = visa.type === 'schengen'
+        ? schengenLastSafeDay(state.stays)
+        : (visa.type === 'perEntry' || visa.type === 'visaRequired')
+          ? addDays(visa.entryDate || cur.start, st.total - 1)
+          : null;
+      visaCard = {
+        accent: sevColor,
+        value: `<span style="color:${sevColor}">${st.left}</span>`,
+        label: `visa days left${visa.country === 'schengen' ? ' (Schengen)' : ''}`,
+        sub: leaveBy ? `leave by ${fmtDate(leaveBy)} · ${st.used}/${st.total} used` : `${st.used}/${st.total} used`,
+      };
+    } else {
+      visaCard = { accent: '#8a5cf6', value: '—', label: 'no visa tracked here', sub: 'tap the country on the map' };
+    }
+  } else {
+    hereCard = { accent: '#4aa8ff', value: '🏠', label: 'not checked in', sub: 'tap "I\'m here now"' };
+    visaCard = { accent: '#8a5cf6', value: '—', label: 'visa days left', sub: 'check in to see your countdown' };
+  }
   const cards = [
-    { accent: '#ff5e7e', value: s.visited.size, label: 'countries visited', sub: `${pct}% of the world` },
-    { accent: '#17b3a6', value: s.totalDays, label: 'days on the road', sub: '' },
-    cur
-      ? { accent: '#4aa8ff', value: `${countryFlag(cur.country)}`, label: `now in ${countryName(cur.country)}`, sub: `day ${daySpan(cur.start, todayISO())}` }
-      : { accent: '#4aa8ff', value: '🏠', label: 'not checked in', sub: 'tap "I\'m here now"' },
-    s.longest
-      ? { accent: '#8a5cf6', value: s.longest.len, label: 'longest stay (days)', sub: `${countryFlag(s.longest.stay.country)} ${countryName(s.longest.stay.country)}` }
-      : { accent: '#8a5cf6', value: '—', label: 'longest stay', sub: 'add your first trip!' },
+    { accent: '#ff5e7e', value: s.visited.size, label: `countr${s.visited.size === 1 ? 'y' : 'ies'} visited`, sub: `${pct}% of the world` },
+    { accent: '#17b3a6', value: s.totalDays, label: `day${s.totalDays === 1 ? '' : 's'} on the road`, sub: '' },
+    hereCard,
+    visaCard,
   ];
   document.getElementById('stats-row').innerHTML = cards.map((c) => `
     <div class="stat-card" style="--accent:${c.accent}">
