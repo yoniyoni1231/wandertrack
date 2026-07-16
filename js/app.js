@@ -41,6 +41,9 @@ const PALETTE = [
   '#e4508f', '#5fb849', '#f45d48', '#2a9d8f', '#6c7ae0', '#d9a509',
 ];
 function colorFor(iso) {
+  // Flag-based color first (see js/data/flag-colors.js); hashed
+  // palette only for territories without a curated entry.
+  if (typeof FLAG_COLORS !== 'undefined' && FLAG_COLORS[iso]) return FLAG_COLORS[iso];
   let h = 0;
   for (let i = 0; i < iso.length; i++) h = (h * 31 + iso.charCodeAt(i)) >>> 0;
   return PALETTE[h % PALETTE.length];
