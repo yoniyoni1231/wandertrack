@@ -239,6 +239,8 @@ main { max-width: 1060px; margin: 0 auto; padding: 0 16px 70px; }
 .exp-note { font-weight: 600; font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .exp-date { color: var(--muted); font-size: .74rem; }
 .exp-amount { font-weight: 800; font-size: .92rem; white-space: nowrap; }
+.exp-trip-row { cursor: pointer; border-radius: 10px; padding: 4px 6px; }
+.exp-trip-row:hover { background: #fff2e5; }
 .trip-country .badge { vertical-align: middle; margin-left: 4px; }
 .empty-note {
   text-align: center; color: var(--muted); padding: 40px 10px;

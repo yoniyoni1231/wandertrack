@@ -137,6 +137,7 @@ function renderAll() {
   renderTrips();
   renderVisas();
   renderPlans();
+  renderExpensesTab();
 }
 
 // ---------- header ----------
@@ -543,6 +544,89 @@ function totalsLabel(perCur) {
     .join(' + ');
 }
 
+// ---------- expenses overview tab ----------
+function renderExpensesTab() {
+  const el = document.getElementById('expenses-overview');
+  if (!el) return;
+  const all = state.expenses || [];
+  if (!all.length) {
+    el.innerHTML = `<div class="empty-note">💰 No expenses yet.<br>
+      Add one with "＋ Add expense" — it attaches itself to the trip covering that date.</div>`;
+    return;
+  }
+
+  const grand = expenseTotals(all);
+
+  // category breakdown (bars proportional in the most-used currency)
+  const byCat = expenseTotalsByCategory(all);
+  const mainCur = [...grand.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  const mainTotal = grand.get(mainCur) || 0;
+  const catRows = EXPENSE_CATEGORIES.map((cat) => {
+    const m = byCat.get(cat.id);
+    if (!m) return '';
+    const pct = mainTotal ? Math.round(((m.get(mainCur) || 0) / mainTotal) * 100) : 0;
+    return `
+      <div class="top-row">
+        <div class="top-flag">${cat.icon}</div>
+        <div class="top-name">${cat.label}</div>
+        <div class="top-bar-track"><div class="top-bar" style="width:${Math.max(2, pct)}%;background:${cat.color}"></div></div>
+        <div class="top-days">${totalsLabel(m)}</div>
+      </div>`;
+  }).join('');
+
+  // by month (newest first)
+  const byMonth = new Map();
+  for (const e of all) {
+    const key = (e.date || '').slice(0, 7) || 'unknown';
+    if (!byMonth.has(key)) byMonth.set(key, []);
+    byMonth.get(key).push(e);
+  }
+  const monthName = (key) => key === 'unknown' ? 'No date'
+    : parseISO(key + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const monthRows = [...byMonth.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([key, list]) => `
+      <div class="top-row">
+        <div class="top-name" style="width:170px">${monthName(key)}</div>
+        <div class="top-days" style="flex:1;text-align:left">${list.length} expense${list.length === 1 ? '' : 's'}</div>
+        <div class="exp-amount">${totalsLabel(expenseTotals(list))}</div>
+      </div>`).join('');
+
+  // by trip (click opens the trip's expense sheet)
+  const { byStay, unassigned } = assignExpenses(state);
+  const tripRows = [...state.stays]
+    .filter((s) => byStay.has(s.id))
+    .sort((a, b) => b.start.localeCompare(a.start))
+    .map((s) => `
+      <div class="top-row exp-trip-row" data-exptrip="${s.id}">
+        <div class="top-flag">${countryFlag(s.country)}</div>
+        <div class="top-name" style="width:auto;flex:1">${countryName(s.country)}
+          <span class="muted" style="font-weight:400"> · ${fmtDate(s.start)} → ${s.end ? fmtDate(s.end) : 'now'}</span></div>
+        <div class="exp-amount">${totalsLabel(expenseTotals(byStay.get(s.id)))}</div>
+      </div>`).join('') + (unassigned.length ? `
+      <div class="top-row exp-trip-row" data-exptrip="_unassigned">
+        <div class="top-flag">💼</div>
+        <div class="top-name" style="width:auto;flex:1">Not linked to a trip</div>
+        <div class="exp-amount">${totalsLabel(expenseTotals(unassigned))}</div>
+      </div>` : '');
+
+  el.innerHTML = `
+    <div class="stats-row">
+      <div class="stat-card" style="--accent:#f7a325">
+        <div class="stat-value">${totalsLabel(grand)}</div>
+        <div class="stat-label">total spent</div>
+        <div class="stat-sub">${all.length} expenses</div>
+      </div>
+    </div>
+    <div class="card"><h2>📅 By month</h2>${monthRows}</div>
+    <div class="card"><h2>🧳 By trip</h2><p class="muted">Tap a trip to see and edit its expenses.</p>${tripRows}</div>
+    <div class="card"><h2>📊 By category</h2>${catRows}</div>`;
+  el.querySelectorAll('[data-exptrip]').forEach((r) => {
+    r.onclick = () => openExpensesModal(
+      r.dataset.exptrip === '_unassigned' ? null : state.stays.find((s) => s.id === r.dataset.exptrip));
+  });
+}
+
 function tripTitle(stay) {
   return stay
     ? `${countryFlag(stay.country)} ${countryName(stay.country)} · ${fmtDate(stay.start)} → ${stay.end ? fmtDate(stay.end) : 'now'}`
@@ -619,15 +703,16 @@ function openExpensesModal(stay) {
   });
 }
 
-function openExpenseForm(stay, exp) {
+function openExpenseForm(stay, exp, opts) {
   const isEdit = !!exp;
+  const globalAdd = !stay && !isEdit && opts && opts.global;
   const defCur = (exp && exp.currency) || state.profile.lastCurrency || 'USD';
   const defDate = (exp && exp.date) ||
     (stay ? (stay.end && stay.end < todayISO() ? stay.end
       : (stay.start > todayISO() ? stay.start : todayISO())) : todayISO());
   const m = openModal(`
     <h2>${isEdit ? '✏️ Edit expense' : '💰 Add expense'}</h2>
-    <p class="muted">${tripTitle(stay)}</p>
+    <p class="muted">${globalAdd ? 'It will attach to the trip covering the date you pick.' : tripTitle(stay)}</p>
     <div class="field-inline">
       <label class="field"><span>Amount</span>
         <input type="number" id="exp-amount" min="0" step="any" inputmode="decimal" value="${exp ? exp.amount : ''}"></label>
@@ -645,7 +730,7 @@ function openExpenseForm(stay, exp) {
       <button class="btn btn-secondary" data-act="cancel">Cancel</button>
       <button class="btn btn-primary" data-act="save">Save expense</button>
     </div>`);
-  m.el.querySelector('[data-act="cancel"]').onclick = () => { m.close(); openExpensesModal(stay); };
+  m.el.querySelector('[data-act="cancel"]').onclick = () => { m.close(); if (!globalAdd) openExpensesModal(stay); };
   m.el.querySelector('[data-act="save"]').onclick = () => {
     const amount = parseFloat(m.el.querySelector('#exp-amount').value);
     if (!amount || amount <= 0) { alert('Enter an amount.'); return; }
@@ -660,7 +745,8 @@ function openExpenseForm(stay, exp) {
     if (isEdit) Object.assign(exp, record);
     else state.expenses.push(Object.assign({ id: newId() }, record));
     state.profile.lastCurrency = record.currency;
-    persist(); renderAll(); m.close(); openExpensesModal(stay);
+    persist(); renderAll(); m.close();
+    if (!globalAdd) openExpensesModal(stay);
   };
 }
 
@@ -1152,6 +1238,7 @@ function init() {
   document.getElementById('btn-add-trip').onclick = () => openTripModal();
   document.getElementById('btn-add-visa').onclick = () => openVisaModal();
   document.getElementById('btn-add-plan').onclick = () => openPlanModal();
+  document.getElementById('btn-add-expense').onclick = () => openExpenseForm(null, null, { global: true });
   document.getElementById('cal-prev').onclick = () => {
     calCursor.m--; if (calCursor.m < 0) { calCursor.m = 11; calCursor.y--; } renderCalendar();
   };

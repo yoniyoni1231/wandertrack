@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>WanderTrack — Travel &amp; Visa Tracker</title>
-  <link rel="stylesheet" href="css/styles.css?v=10">
+  <link rel="stylesheet" href="css/styles.css?v=11">
 </head>
 <body>
 
@@ -28,6 +28,7 @@
     <button class="tab active" data-tab="map">🗺️ <span>Map</span></button>
     <button class="tab" data-tab="calendar">📅 <span>Calendar</span></button>
     <button class="tab" data-tab="trips">🧳 <span>Trips</span></button>
+    <button class="tab" data-tab="expenses">💰 <span>Expenses</span></button>
     <button class="tab" data-tab="visas">🛂 <span>Visas</span></button>
     <button class="tab" data-tab="plan">🛫 <span>Plan</span></button>
     <button class="tab" data-tab="settings">⚙️ <span>Settings</span></button>
@@ -76,6 +77,15 @@
         <button id="btn-add-trip" class="btn btn-primary">＋ Add trip</button>
       </div>
       <div id="trips-list"></div>
+    </section>
+
+    <!-- ============ EXPENSES ============ -->
+    <section id="tab-expenses" class="tab-panel">
+      <div class="section-head">
+        <h2>Expenses</h2>
+        <button id="btn-add-expense" class="btn btn-primary">＋ Add expense</button>
+      </div>
+      <div id="expenses-overview"></div>
     </section>
 
     <!-- ============ VISAS ============ -->
@@ -136,14 +146,14 @@
   <div id="modal-root"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=10"></script>
-  <script src="js/data/world-map.js?v=10"></script>
-  <script src="js/data/country-extras.js?v=10"></script>
-  <script src="js/data/flag-colors.js?v=10"></script>
-  <script src="js/data/visa-rules.js?v=10"></script>
-  <script src="js/storage.js?v=10"></script>
-  <script src="js/logic.js?v=10"></script>
-  <script src="js/cloud.js?v=10"></script>
-  <script src="js/app.js?v=10"></script>
+  <script src="js/config.js?v=11"></script>
+  <script src="js/data/world-map.js?v=11"></script>
+  <script src="js/data/country-extras.js?v=11"></script>
+  <script src="js/data/flag-colors.js?v=11"></script>
+  <script src="js/data/visa-rules.js?v=11"></script>
+  <script src="js/storage.js?v=11"></script>
+  <script src="js/logic.js?v=11"></script>
+  <script src="js/cloud.js?v=11"></script>
+  <script src="js/app.js?v=11"></script>
 </body>
 </html>
