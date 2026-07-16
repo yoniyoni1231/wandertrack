@@ -127,6 +127,21 @@ main { max-width: 1060px; margin: 0 auto; padding: 0 16px 70px; }
 
 /* ---------- map ---------- */
 .map-card { padding: 10px; position: relative; }
+.map-views {
+  display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+  padding: 4px 0 8px;
+}
+.map-views button {
+  border: 1.5px solid var(--line); background: #fffdf9; color: var(--muted);
+  border-radius: 999px; padding: 6px 14px; font-size: .8rem; font-weight: 700;
+  transition: all .15s;
+}
+.map-views button:hover { border-color: #ffb1c4; }
+.map-views button.active {
+  background: var(--grad); color: #fff; border-color: transparent;
+  box-shadow: 0 3px 10px rgba(255,94,126,.3);
+}
+.map-container svg { max-height: 72vh; margin: 0 auto; }
 .map-container svg { width: 100%; height: auto; display: block; }
 .map-container path {
   fill: var(--sand); stroke: #fff; stroke-width: .4;

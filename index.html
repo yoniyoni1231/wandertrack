@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>WanderTrack — Travel &amp; Visa Tracker</title>
-  <link rel="stylesheet" href="css/styles.css?v=8">
+  <link rel="stylesheet" href="css/styles.css?v=9">
 </head>
 <body>
 
@@ -38,6 +38,12 @@
     <section id="tab-map" class="tab-panel active">
       <div id="stats-row" class="stats-row"></div>
       <div class="card map-card">
+        <div class="map-views" id="map-views">
+          <button data-view="world">🌍 World</button>
+          <button data-view="travels">✈️ My travels</button>
+          <button data-view="europe">🏰 Europe</button>
+          <button data-view="asia">🏯 Asia</button>
+        </div>
         <div id="world-map-container" class="map-container"></div>
         <div id="map-tooltip" class="map-tooltip" hidden></div>
         <p class="map-hint">Click a country for details · colored countries are places you've been</p>
@@ -130,13 +136,13 @@
   <div id="modal-root"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=8"></script>
-  <script src="js/data/world-map.js?v=8"></script>
-  <script src="js/data/flag-colors.js?v=8"></script>
-  <script src="js/data/visa-rules.js?v=8"></script>
-  <script src="js/storage.js?v=8"></script>
-  <script src="js/logic.js?v=8"></script>
-  <script src="js/cloud.js?v=8"></script>
-  <script src="js/app.js?v=8"></script>
+  <script src="js/config.js?v=9"></script>
+  <script src="js/data/world-map.js?v=9"></script>
+  <script src="js/data/flag-colors.js?v=9"></script>
+  <script src="js/data/visa-rules.js?v=9"></script>
+  <script src="js/storage.js?v=9"></script>
+  <script src="js/logic.js?v=9"></script>
+  <script src="js/cloud.js?v=9"></script>
+  <script src="js/app.js?v=9"></script>
 </body>
 </html>

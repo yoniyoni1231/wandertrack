@@ -251,6 +251,67 @@ function initMap() {
   });
 }
 
+// ---------- map views (zoom presets) ----------
+const WORLD_BOX = [0, 0, 1010, 666];
+// Anchor countries whose combined bounding box defines each preset.
+const MAP_VIEW_ANCHORS = {
+  europe: ['is', 'pt', 'es', 'no', 'fi', 'gr', 'cy', 'ie', 'gb', 'it', 'pl', 'ro'],
+  asia: ['tr', 'jp', 'id', 'in', 'th', 'kr', 'ph', 'kz', 'lk', 'mn', 'il'],
+};
+const mapBBoxCache = {};
+
+function pathBBox(svg, iso) {
+  if (mapBBoxCache[iso]) return mapBBoxCache[iso];
+  const p = svg.querySelector(`path[id="${iso}"]`);
+  if (!p) return null;
+  try {
+    const b = p.getBBox();
+    if (!b.width && !b.height) return null; // not rendered yet — don't cache
+    mapBBoxCache[iso] = b;
+    return b;
+  } catch (e) { return null; }
+}
+
+function currentMapView() {
+  if (state.profile.mapView) return state.profile.mapView;
+  return visitedCountries(state.stays).size ? 'travels' : 'world';
+}
+
+function applyMapView() {
+  const svg = document.querySelector('#world-map-container svg');
+  if (!svg) return;
+  const view = currentMapView();
+  let box = WORLD_BOX;
+  let isos = null;
+  if (view === 'travels') {
+    const visited = [...visitedCountries(state.stays)];
+    if (visited.length) isos = visited;
+  } else if (MAP_VIEW_ANCHORS[view]) {
+    isos = MAP_VIEW_ANCHORS[view];
+  }
+  if (isos) {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const iso of isos) {
+      const b = pathBBox(svg, iso);
+      if (!b) continue;
+      x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y);
+      x2 = Math.max(x2, b.x + b.width); y2 = Math.max(y2, b.y + b.height);
+    }
+    if (isFinite(x1)) {
+      const pad = Math.max(x2 - x1, y2 - y1) * 0.06 + 6;
+      box = [
+        Math.max(WORLD_BOX[0], x1 - pad),
+        Math.max(WORLD_BOX[1], y1 - pad),
+        Math.min(WORLD_BOX[2], (x2 - x1) + 2 * pad),
+        Math.min(WORLD_BOX[3], (y2 - y1) + 2 * pad),
+      ];
+    }
+  }
+  svg.setAttribute('viewBox', box.join(' '));
+  document.querySelectorAll('#map-views button').forEach((b) =>
+    b.classList.toggle('active', b.dataset.view === view));
+}
+
 function renderMapColors() {
   const container = document.getElementById('world-map-container');
   const counts = daysPerCountry(state.stays);
@@ -261,6 +322,7 @@ function renderMapColors() {
     else p.style.fill = '';
     p.classList.toggle('current', !!(cur && cur.country === iso));
   });
+  applyMapView(); // keep the zoom in sync (e.g. "My travels" fit)
 }
 
 // ---------- country details modal ----------
@@ -1072,6 +1134,13 @@ function init() {
   Cloud.init();
   renderAccountCard();
   document.getElementById('btn-checkin').onclick = () => openCheckInModal();
+  document.getElementById('map-views').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-view]');
+    if (!btn) return;
+    state.profile.mapView = btn.dataset.view;
+    persist();
+    applyMapView();
+  });
   document.getElementById('btn-add-trip').onclick = () => openTripModal();
   document.getElementById('btn-add-visa').onclick = () => openVisaModal();
   document.getElementById('btn-add-plan').onclick = () => openPlanModal();
