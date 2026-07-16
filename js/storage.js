@@ -23,6 +23,9 @@ const Storage = {
       // plans: hypothetical future stays for the trip simulator.
       // { id, country, start, end } — never mixed into real stats.
       plans: [],
+      // expenses: money spent, linked to trips.
+      // { id, stayId, date, category, amount, currency, note }
+      expenses: [],
     };
   },
 

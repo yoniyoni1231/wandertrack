@@ -439,34 +439,215 @@ function openDayModal(dateISO) {
 }
 
 // ============================================================
+// EXPENSES
+// ============================================================
+const EXPENSE_CATEGORIES = [
+  { id: 'flights', icon: '✈️', label: 'Flights', color: '#4aa8ff' },
+  { id: 'transport', icon: '🚆', label: 'Transport', color: '#00a8cc' },
+  { id: 'car', icon: '🚗', label: 'Car & fuel', color: '#8a5cf6' },
+  { id: 'stay', icon: '🏨', label: 'Accommodation', color: '#ff6b6b' },
+  { id: 'food', icon: '🍜', label: 'Food & drinks', color: '#f7a325' },
+  { id: 'fun', icon: '🎡', label: 'Attractions', color: '#ec5fa4' },
+  { id: 'shopping', icon: '🛍️', label: 'Shopping', color: '#2fbf71' },
+  { id: 'fees', icon: '🛂', label: 'Visas & fees', color: '#d9a509' },
+  { id: 'other', icon: '💳', label: 'Other', color: '#6c7ae0' },
+];
+const catById = (id) => EXPENSE_CATEGORIES.find((c) => c.id === id) || EXPENSE_CATEGORIES[EXPENSE_CATEGORIES.length - 1];
+
+const CURRENCIES = ['USD', 'EUR', 'ILS', 'GBP', 'THB', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD',
+  'TRY', 'GEL', 'AED', 'INR', 'VND', 'IDR', 'PHP', 'MYR', 'SGD', 'KRW', 'TWD', 'CNY',
+  'MXN', 'BRL', 'ARS', 'CLP', 'PEN', 'COP', 'CRC', 'ZAR', 'MAD', 'EGP', 'CZK', 'PLN',
+  'HUF', 'RON', 'RSD', 'ALL', 'BGN', 'DKK', 'NOK', 'SEK', 'ISK'];
+const CURRENCY_SYMBOL = { USD: '$', EUR: '€', ILS: '₪', GBP: '£', THB: '฿', JPY: '¥', CNY: '¥', KRW: '₩', VND: '₫', INR: '₹', TRY: '₺', PHP: '₱' };
+
+function fmtMoney(amount, cur) {
+  const n = (Number(amount) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const sym = CURRENCY_SYMBOL[cur];
+  return sym ? `${sym}${n}` : `${n} ${cur}`;
+}
+// "₪1,200 + $340" style label from a per-currency totals Map.
+function totalsLabel(perCur) {
+  return [...perCur.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([cur, sum]) => fmtMoney(sum, cur))
+    .join(' + ');
+}
+
+function tripTitle(stay) {
+  return stay
+    ? `${countryFlag(stay.country)} ${countryName(stay.country)} · ${fmtDate(stay.start)} → ${stay.end ? fmtDate(stay.end) : 'now'}`
+    : '💼 Not linked to a trip';
+}
+
+function openExpensesModal(stay) {
+  const { byStay, unassigned } = assignExpenses(state);
+  const list = stay ? (byStay.get(stay.id) || []) : unassigned;
+  list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const totals = expenseTotals(list);
+  const byCat = expenseTotalsByCategory(list);
+
+  // Category bars are proportional within the most-used currency;
+  // other currencies are shown as text so we never fake conversions.
+  const mainCur = [...totals.entries()].sort((a, b) => b[1] - a[1])[0];
+  let breakdown = '';
+  if (mainCur) {
+    const [cur, curTotal] = mainCur;
+    breakdown = EXPENSE_CATEGORIES.map((cat) => {
+      const m = byCat.get(cat.id);
+      if (!m) return '';
+      const catLabel = totalsLabel(m);
+      const inMain = m.get(cur) || 0;
+      const pct = curTotal ? Math.round((inMain / curTotal) * 100) : 0;
+      return `
+        <div class="top-row">
+          <div class="top-flag">${cat.icon}</div>
+          <div class="top-name">${cat.label}</div>
+          <div class="top-bar-track"><div class="top-bar" style="width:${Math.max(2, pct)}%;background:${cat.color}"></div></div>
+          <div class="top-days">${catLabel}</div>
+        </div>`;
+    }).join('');
+  }
+
+  const rows = list.length ? list.map((e) => {
+    const cat = catById(e.category);
+    return `
+      <div class="exp-row">
+        <div class="exp-icon">${cat.icon}</div>
+        <div class="exp-main">
+          <div class="exp-note">${e.note || cat.label}</div>
+          <div class="exp-date">${e.date ? fmtDate(e.date) : ''}</div>
+        </div>
+        <div class="exp-amount">${fmtMoney(e.amount, e.currency)}</div>
+        <button class="icon-btn" data-eedit="${e.id}" title="Edit">✏️</button>
+        <button class="icon-btn" data-edel="${e.id}" title="Delete">🗑️</button>
+      </div>`;
+  }).join('') : '<p class="muted">No expenses yet for this trip.</p>';
+
+  const m = openModal(`
+    <h2>💰 Expenses</h2>
+    <p class="muted">${tripTitle(stay)}</p>
+    ${totals.size ? `<div class="exp-total">Total: <b>${totalsLabel(totals)}</b></div>` : ''}
+    ${breakdown}
+    <div class="exp-list">${rows}</div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" data-act="close">Close</button>
+      <button class="btn btn-primary" data-act="add">＋ Add expense</button>
+    </div>`);
+  m.el.querySelector('[data-act="close"]').onclick = m.close;
+  m.el.querySelector('[data-act="add"]').onclick = () => { m.close(); openExpenseForm(stay); };
+  m.el.querySelectorAll('[data-eedit]').forEach((b) => {
+    b.onclick = () => {
+      const exp = state.expenses.find((x) => x.id === b.dataset.eedit);
+      m.close(); openExpenseForm(stay, exp);
+    };
+  });
+  m.el.querySelectorAll('[data-edel]').forEach((b) => {
+    b.onclick = () => {
+      state.expenses = state.expenses.filter((x) => x.id !== b.dataset.edel);
+      persist(); renderAll(); m.close(); openExpensesModal(stay);
+    };
+  });
+}
+
+function openExpenseForm(stay, exp) {
+  const isEdit = !!exp;
+  const defCur = (exp && exp.currency) || state.profile.lastCurrency || 'USD';
+  const defDate = (exp && exp.date) ||
+    (stay ? (stay.end && stay.end < todayISO() ? stay.end
+      : (stay.start > todayISO() ? stay.start : todayISO())) : todayISO());
+  const m = openModal(`
+    <h2>${isEdit ? '✏️ Edit expense' : '💰 Add expense'}</h2>
+    <p class="muted">${tripTitle(stay)}</p>
+    <div class="field-inline">
+      <label class="field"><span>Amount</span>
+        <input type="number" id="exp-amount" min="0" step="any" inputmode="decimal" value="${exp ? exp.amount : ''}"></label>
+      <label class="field"><span>Currency</span>
+        <select id="exp-cur">${CURRENCIES.map((c) => `<option ${c === defCur ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+    </div>
+    <label class="field"><span>Category</span>
+      <select id="exp-cat">${EXPENSE_CATEGORIES.map((c) =>
+        `<option value="${c.id}" ${exp && exp.category === c.id ? 'selected' : ''}>${c.icon} ${c.label}</option>`).join('')}</select></label>
+    <div class="field-inline">
+      <label class="field"><span>Date</span><input type="date" id="exp-date" value="${defDate}"></label>
+      <label class="field"><span>Note (optional)</span><input type="text" id="exp-note" value="${exp && exp.note ? exp.note.replace(/"/g, '&quot;') : ''}" placeholder="e.g. night train to Chiang Mai"></label>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" data-act="cancel">Cancel</button>
+      <button class="btn btn-primary" data-act="save">Save expense</button>
+    </div>`);
+  m.el.querySelector('[data-act="cancel"]').onclick = () => { m.close(); openExpensesModal(stay); };
+  m.el.querySelector('[data-act="save"]').onclick = () => {
+    const amount = parseFloat(m.el.querySelector('#exp-amount').value);
+    if (!amount || amount <= 0) { alert('Enter an amount.'); return; }
+    const record = {
+      stayId: stay ? stay.id : (exp ? exp.stayId : null),
+      date: m.el.querySelector('#exp-date').value || todayISO(),
+      category: m.el.querySelector('#exp-cat').value,
+      amount,
+      currency: m.el.querySelector('#exp-cur').value,
+      note: m.el.querySelector('#exp-note').value.trim(),
+    };
+    if (isEdit) Object.assign(exp, record);
+    else state.expenses.push(Object.assign({ id: newId() }, record));
+    state.profile.lastCurrency = record.currency;
+    persist(); renderAll(); m.close(); openExpensesModal(stay);
+  };
+}
+
+// ============================================================
 // TRIPS
 // ============================================================
 function renderTrips() {
   const listEl = document.getElementById('trips-list');
   const stays = [...state.stays].sort((a, b) => b.start.localeCompare(a.start));
-  if (!stays.length) {
+  const { byStay, unassigned } = assignExpenses(state);
+  if (!stays.length && !unassigned.length) {
     listEl.innerHTML = '<div class="empty-note">✈️ No trips yet.<br>Add your travel history with "＋ Add trip", or hit "I\'m here now" to start tracking.</div>';
     return;
   }
-  listEl.innerHTML = stays.map((st) => `
+  const expChip = (list) => list.length
+    ? `💰 ${totalsLabel(expenseTotals(list))}`
+    : '💰 Add expenses';
+  listEl.innerHTML = stays.map((st) => {
+    const exps = byStay.get(st.id) || [];
+    return `
     <div class="trip-row">
       <div class="trip-flag">${countryFlag(st.country)}</div>
       <div class="trip-main">
         <div class="trip-country">${countryName(st.country)}</div>
         <div class="trip-dates">${fmtDate(st.start)} → ${st.end ? fmtDate(st.end) : 'ongoing'}</div>
+        <button class="exp-chip ${exps.length ? '' : 'exp-chip-empty'}" data-exp="${st.id}">${expChip(exps)}</button>
       </div>
       <div class="trip-days ${st.end ? '' : 'trip-ongoing'}">${daySpan(st.start, stayEnd(st))} days${st.end ? '' : ' · here now'}</div>
       <button class="icon-btn" data-edit="${st.id}" title="Edit">✏️</button>
       <button class="icon-btn" data-del="${st.id}" title="Delete">🗑️</button>
-    </div>`).join('');
+    </div>`;
+  }).join('') + (unassigned.length ? `
+    <div class="trip-row">
+      <div class="trip-flag">💼</div>
+      <div class="trip-main">
+        <div class="trip-country">Other expenses</div>
+        <div class="trip-dates">Not linked to any trip</div>
+        <button class="exp-chip" data-exp="_unassigned">💰 ${totalsLabel(expenseTotals(unassigned))}</button>
+      </div>
+    </div>` : '');
+  listEl.querySelectorAll('[data-exp]').forEach((b) => {
+    b.onclick = () => openExpensesModal(
+      b.dataset.exp === '_unassigned' ? null : state.stays.find((s) => s.id === b.dataset.exp));
+  });
   listEl.querySelectorAll('[data-edit]').forEach((b) => {
     b.onclick = () => openTripModal(state.stays.find((s) => s.id === b.dataset.edit));
   });
   listEl.querySelectorAll('[data-del]').forEach((b) => {
     b.onclick = () => {
       const stay = state.stays.find((s) => s.id === b.dataset.del);
-      if (confirm(`Delete this trip to ${countryName(stay.country)}?`)) {
+      const linked = (byStay.get(stay.id) || []).length;
+      const msg = `Delete this trip to ${countryName(stay.country)}?` +
+        (linked ? `\nIts ${linked} expense${linked === 1 ? '' : 's'} will be deleted too.` : '');
+      if (confirm(msg)) {
+        const linkedIds = new Set((byStay.get(stay.id) || []).map((e) => e.id));
         state.stays = state.stays.filter((s) => s.id !== stay.id);
+        state.expenses = state.expenses.filter((e) => !linkedIds.has(e.id));
         persist(); renderAll();
       }
     };

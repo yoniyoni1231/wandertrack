@@ -204,6 +204,26 @@ main { max-width: 1060px; margin: 0 auto; padding: 0 16px 70px; }
 }
 .icon-btn:hover { background: var(--line); }
 .plan-bad { border: 1.5px solid #ffc2c2; background: #fff7f7; }
+
+/* ---------- expenses ---------- */
+.exp-chip {
+  border: none; background: #fff2e5; color: #d96a1f;
+  border-radius: 999px; padding: 4px 12px; font-size: .78rem; font-weight: 700;
+  margin-top: 6px; cursor: pointer;
+}
+.exp-chip:hover { background: #ffe7d1; }
+.exp-chip-empty { background: #faf5ec; color: var(--muted); font-weight: 600; }
+.exp-total { font-size: 1.05rem; margin: 8px 0 12px; }
+.exp-list { margin: 12px 0 4px; max-height: 44vh; overflow-y: auto; }
+.exp-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 4px; border-bottom: 1px solid var(--line);
+}
+.exp-icon { font-size: 1.25rem; width: 30px; text-align: center; }
+.exp-main { flex: 1; min-width: 0; }
+.exp-note { font-weight: 600; font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp-date { color: var(--muted); font-size: .74rem; }
+.exp-amount { font-weight: 800; font-size: .92rem; white-space: nowrap; }
 .trip-country .badge { vertical-align: middle; margin-left: 4px; }
 .empty-note {
   text-align: center; color: var(--muted); padding: 40px 10px;

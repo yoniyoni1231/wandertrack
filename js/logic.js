@@ -343,6 +343,50 @@ function evaluatePlan(state, plan) {
   };
 }
 
+// ---------- expenses ----------
+// Group expenses by trip. Primary link is stayId; if that stay no
+// longer exists (trips get split/merged), fall back to the stay
+// whose dates cover the expense date. Anything left is unassigned.
+function assignExpenses(state) {
+  const byStay = new Map();
+  const unassigned = [];
+  const stayIds = new Set(state.stays.map((s) => s.id));
+  for (const e of state.expenses || []) {
+    let sid = stayIds.has(e.stayId) ? e.stayId : null;
+    if (!sid && e.date) {
+      const host = state.stays.find((s) => e.date >= s.start && e.date <= stayEnd(s));
+      if (host) sid = host.id;
+    }
+    if (sid) {
+      if (!byStay.has(sid)) byStay.set(sid, []);
+      byStay.get(sid).push(e);
+    } else {
+      unassigned.push(e);
+    }
+  }
+  return { byStay, unassigned };
+}
+
+// Totals per currency (no exchange-rate guessing): Map cur -> sum.
+function expenseTotals(list) {
+  const per = new Map();
+  for (const e of list) {
+    per.set(e.currency, (per.get(e.currency) || 0) + (Number(e.amount) || 0));
+  }
+  return per;
+}
+
+// Per-category totals: Map category -> (Map currency -> sum).
+function expenseTotalsByCategory(list) {
+  const per = new Map();
+  for (const e of list) {
+    if (!per.has(e.category)) per.set(e.category, new Map());
+    const m = per.get(e.category);
+    m.set(e.currency, (m.get(e.currency) || 0) + (Number(e.amount) || 0));
+  }
+  return per;
+}
+
 // ---------- stats ----------
 function travelStats(stays) {
   const perCountry = daysPerCountry(stays);
