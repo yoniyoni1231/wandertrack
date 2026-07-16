@@ -17,6 +17,12 @@ const COUNTRIES = {};
     const name = (p.getAttribute('name') || iso).replace(/\s+/g, ' ').trim();
     COUNTRIES[iso] = { name, flag: flagEmoji(iso) };
   });
+  // Territories too small for the map but still selectable.
+  if (typeof COUNTRY_EXTRAS !== 'undefined') {
+    for (const [iso, name] of Object.entries(COUNTRY_EXTRAS)) {
+      if (!COUNTRIES[iso]) COUNTRIES[iso] = { name, flag: flagEmoji(iso) };
+    }
+  }
 })();
 
 function flagEmoji(iso2) {
@@ -232,6 +238,8 @@ function renderStats() {
 function initMap() {
   const container = document.getElementById('world-map-container');
   container.innerHTML = WORLD_MAP_SVG;
+  const svg = container.querySelector('svg');
+  WORLD_BOX = svg.getAttribute('viewBox').split(/\s+/).map(Number);
   const tooltip = document.getElementById('map-tooltip');
   container.addEventListener('mousemove', (e) => {
     const path = e.target.closest('path[id]');
@@ -252,7 +260,7 @@ function initMap() {
 }
 
 // ---------- map views (zoom presets) ----------
-const WORLD_BOX = [0, 0, 1010, 666];
+let WORLD_BOX = [0, 0, 950, 410]; // replaced by the real viewBox in initMap
 // Anchor countries whose combined bounding box defines each preset.
 const MAP_VIEW_ANCHORS = {
   europe: ['is', 'pt', 'es', 'no', 'fi', 'gr', 'cy', 'ie', 'gb', 'it', 'pl', 'ro'],
