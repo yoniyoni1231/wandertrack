@@ -118,6 +118,7 @@ const Cloud = {
           Storage.save(state);
           this.lastSyncedAt = cloud.updated_at;
           renderAll();
+          if (typeof ensureConversions === 'function') ensureConversions();
         } else {
           await this.push(state);
         }
@@ -145,6 +146,7 @@ const Cloud = {
         Storage.save(state);
         this.lastSyncedAt = cloud.updated_at;
         renderAll();
+        if (typeof ensureConversions === 'function') ensureConversions();
         if (typeof renderAccountCard === 'function') renderAccountCard();
       }
     } catch (e) {

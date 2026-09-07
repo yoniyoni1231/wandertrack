@@ -367,7 +367,9 @@ function assignExpenses(state) {
   return { byStay, unassigned };
 }
 
-// Totals per currency (no exchange-rate guessing): Map cur -> sum.
+// Totals in the currencies actually paid: Map cur -> sum.
+// Kept for the "what this is made of" breakdown; every headline
+// figure uses the ILS totals below.
 function expenseTotals(list) {
   const per = new Map();
   for (const e of list) {
@@ -376,13 +378,30 @@ function expenseTotals(list) {
   return per;
 }
 
-// Per-category totals: Map category -> (Map currency -> sum).
-function expenseTotalsByCategory(list) {
+// Sum in ILS using each expense's frozen conversion (see js/fx.js).
+// `pending` counts expenses that never got a rate — they're left
+// out of the total rather than silently counted as zero.
+function expenseTotalILS(list) {
+  let total = 0;
+  let pending = 0;
+  let approx = false;
+  for (const e of list) {
+    if (typeof e.ils === 'number' && isFinite(e.ils)) {
+      total += e.ils;
+      if (e.fxSource === 'fallback') approx = true;
+    } else {
+      pending++;
+    }
+  }
+  return { total, pending, approx };
+}
+
+// Per-category ILS totals: Map category -> sum.
+function expenseTotalsByCategoryILS(list) {
   const per = new Map();
   for (const e of list) {
-    if (!per.has(e.category)) per.set(e.category, new Map());
-    const m = per.get(e.category);
-    m.set(e.currency, (m.get(e.currency) || 0) + (Number(e.amount) || 0));
+    if (typeof e.ils !== 'number' || !isFinite(e.ils)) continue;
+    per.set(e.category, (per.get(e.category) || 0) + e.ils);
   }
   return per;
 }

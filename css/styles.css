@@ -238,7 +238,14 @@ main { max-width: 1060px; margin: 0 auto; padding: 0 16px 70px; }
 .exp-main { flex: 1; min-width: 0; }
 .exp-note { font-weight: 600; font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .exp-date { color: var(--muted); font-size: .74rem; }
-.exp-amount { font-weight: 800; font-size: .92rem; white-space: nowrap; }
+.exp-amount { font-weight: 800; font-size: .92rem; white-space: nowrap; text-align: right; }
+.exp-conv { font-weight: 600; font-size: .72rem; color: var(--muted); margin-top: 1px; }
+.exp-ils { width: 92px; }
+.fx-pending { color: var(--warn); }
+.fx-hint {
+  margin: -4px 0 10px; font-size: .82rem; min-height: 1.1em;
+}
+.fx-hint b { font-size: .95rem; }
 .exp-trip-row { cursor: pointer; border-radius: 10px; padding: 4px 6px; }
 .exp-trip-row:hover { background: #fff2e5; }
 .trip-country .badge { vertical-align: middle; margin-left: 4px; }

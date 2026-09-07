@@ -138,6 +138,51 @@ function renderAll() {
   renderVisas();
   renderPlans();
   renderExpensesTab();
+  renderFxCard();
+}
+
+// Fill in shekel conversions after any wholesale state swap —
+// startup, backup import, or a cloud pull. Backups written before
+// conversions existed (and expenses saved while offline) arrive
+// with no `ils`, so this is what makes an old file load correctly.
+function ensureConversions() {
+  return FX.backfill(state.expenses)
+    .then((n) => { if (n) { persist(); renderAll(); } return n; })
+    .catch((e) => { console.warn('FX backfill failed:', e); return 0; });
+}
+
+// ---------- exchange-rate status (Settings) ----------
+function renderFxCard() {
+  const card = document.getElementById('fx-card');
+  if (!card) return;
+  const all = state.expenses || [];
+  const approx = all.filter((e) => e.fxSource === 'fallback').length;
+  const missing = all.filter((e) => typeof e.ils !== 'number').length;
+  const updated = FX.lastUpdated();
+  card.innerHTML = `
+    <h2>💱 Currency conversion</h2>
+    <p class="muted">Totals across trips are shown in shekels. Each expense keeps the
+      currency you paid in, and the rate is frozen on the day of the expense — so your
+      past totals don't move when the shekel does.</p>
+    <p class="muted">Rates last fetched: <b>${updated ? new Date(updated).toLocaleString() : 'never'}</b>
+      ${approx ? `<br>⚠️ ${approx} expense${approx === 1 ? '' : 's'} used an offline estimate.` : ''}
+      ${missing ? `<br>⚠️ ${missing} expense${missing === 1 ? '' : 's'} could not be converted.` : ''}</p>
+    <div class="btn-row">
+      <button id="btn-fx-refresh" class="btn btn-secondary">🔄 Re-check estimated rates</button>
+    </div>
+    <p class="muted" id="fx-msg"></p>`;
+  card.querySelector('#btn-fx-refresh').onclick = async () => {
+    const msg = card.querySelector('#fx-msg');
+    msg.textContent = 'Fetching rates…';
+    try {
+      const n = await FX.refreshApprox(state.expenses);
+      persist(); renderAll();
+      const el = document.getElementById('fx-msg');
+      if (el) el.textContent = n ? `Updated ${n} expense${n === 1 ? '' : 's'}.` : 'Nothing needed updating.';
+    } catch (e) {
+      msg.textContent = '❌ Could not reach the rate service.';
+    }
+  };
 }
 
 // ---------- header ----------
@@ -544,6 +589,25 @@ function totalsLabel(perCur) {
     .join(' + ');
 }
 
+// ---------- ILS sums ----------
+// Every combined figure in the app is shown in shekels. The "≈"
+// is not decoration: these are converted numbers, so they're
+// close, not exact.
+function fmtILS(n) {
+  return '₪' + Math.round(Number(n) || 0).toLocaleString();
+}
+// Headline label for a list of expenses, e.g. "≈₪31,240".
+// Appends a marker when some expenses have no rate yet.
+function ilsLabel(list) {
+  const { total, pending } = expenseTotalILS(list);
+  const base = '≈' + fmtILS(total);
+  return pending ? `${base} +${pending}?` : base;
+}
+// The true currencies behind an ILS figure, e.g. "€7,671 + ฿12,400".
+function sourceLabel(list) {
+  return totalsLabel(expenseTotals(list));
+}
+
 // ---------- expenses overview tab ----------
 function renderExpensesTab() {
   const el = document.getElementById('expenses-overview');
@@ -555,22 +619,22 @@ function renderExpensesTab() {
     return;
   }
 
-  const grand = expenseTotals(all);
+  const grand = expenseTotalILS(all);
 
-  // category breakdown (bars proportional in the most-used currency)
-  const byCat = expenseTotalsByCategory(all);
-  const mainCur = [...grand.entries()].sort((a, b) => b[1] - a[1])[0][0];
-  const mainTotal = grand.get(mainCur) || 0;
+  // Category breakdown. Now that everything is in one currency the
+  // bars are genuinely proportional — they used to be sized against
+  // whichever currency happened to dominate, which made them lie.
+  const byCat = expenseTotalsByCategoryILS(all);
   const catRows = EXPENSE_CATEGORIES.map((cat) => {
-    const m = byCat.get(cat.id);
-    if (!m) return '';
-    const pct = mainTotal ? Math.round(((m.get(mainCur) || 0) / mainTotal) * 100) : 0;
+    const sum = byCat.get(cat.id);
+    if (!sum) return '';
+    const pct = grand.total ? Math.round((sum / grand.total) * 100) : 0;
     return `
       <div class="top-row">
         <div class="top-flag">${cat.icon}</div>
         <div class="top-name">${cat.label}</div>
         <div class="top-bar-track"><div class="top-bar" style="width:${Math.max(2, pct)}%;background:${cat.color}"></div></div>
-        <div class="top-days">${totalsLabel(m)}</div>
+        <div class="top-days exp-ils">≈${fmtILS(sum)}</div>
       </div>`;
   }).join('');
 
@@ -589,7 +653,7 @@ function renderExpensesTab() {
       <div class="top-row">
         <div class="top-name" style="width:170px">${monthName(key)}</div>
         <div class="top-days" style="flex:1;text-align:left">${list.length} expense${list.length === 1 ? '' : 's'}</div>
-        <div class="exp-amount">${totalsLabel(expenseTotals(list))}</div>
+        <div class="exp-amount">${ilsLabel(list)}</div>
       </div>`).join('');
 
   // by trip (click opens the trip's expense sheet)
@@ -602,20 +666,23 @@ function renderExpensesTab() {
         <div class="top-flag">${countryFlag(s.country)}</div>
         <div class="top-name" style="width:auto;flex:1">${countryName(s.country)}
           <span class="muted" style="font-weight:400"> · ${fmtDate(s.start)} → ${s.end ? fmtDate(s.end) : 'now'}</span></div>
-        <div class="exp-amount">${totalsLabel(expenseTotals(byStay.get(s.id)))}</div>
+        <div class="exp-amount">${ilsLabel(byStay.get(s.id))}</div>
       </div>`).join('') + (unassigned.length ? `
       <div class="top-row exp-trip-row" data-exptrip="_unassigned">
         <div class="top-flag">💼</div>
         <div class="top-name" style="width:auto;flex:1">Not linked to a trip</div>
-        <div class="exp-amount">${totalsLabel(expenseTotals(unassigned))}</div>
+        <div class="exp-amount">${ilsLabel(unassigned)}</div>
       </div>` : '');
 
+  // The one place the real currencies stay visible, so the shekel
+  // figure is never a black box.
   el.innerHTML = `
     <div class="stats-row">
       <div class="stat-card" style="--accent:#f7a325">
-        <div class="stat-value">${totalsLabel(grand)}</div>
+        <div class="stat-value">≈${fmtILS(grand.total)}</div>
         <div class="stat-label">total spent</div>
-        <div class="stat-sub">${all.length} expenses</div>
+        <div class="stat-sub">${all.length} expenses · ${sourceLabel(all)}</div>
+        ${grand.pending ? `<div class="stat-sub fx-pending">${grand.pending} not converted yet</div>` : ''}
       </div>
     </div>
     <div class="card"><h2>📅 By month</h2>${monthRows}</div>
@@ -637,33 +704,29 @@ function openExpensesModal(stay) {
   const { byStay, unassigned } = assignExpenses(state);
   const list = stay ? (byStay.get(stay.id) || []) : unassigned;
   list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const totals = expenseTotals(list);
-  const byCat = expenseTotalsByCategory(list);
+  const totals = expenseTotalILS(list);
+  const byCat = expenseTotalsByCategoryILS(list);
 
-  // Category bars are proportional within the most-used currency;
-  // other currencies are shown as text so we never fake conversions.
-  const mainCur = [...totals.entries()].sort((a, b) => b[1] - a[1])[0];
-  let breakdown = '';
-  if (mainCur) {
-    const [cur, curTotal] = mainCur;
-    breakdown = EXPENSE_CATEGORIES.map((cat) => {
-      const m = byCat.get(cat.id);
-      if (!m) return '';
-      const catLabel = totalsLabel(m);
-      const inMain = m.get(cur) || 0;
-      const pct = curTotal ? Math.round((inMain / curTotal) * 100) : 0;
-      return `
-        <div class="top-row">
-          <div class="top-flag">${cat.icon}</div>
-          <div class="top-name">${cat.label}</div>
-          <div class="top-bar-track"><div class="top-bar" style="width:${Math.max(2, pct)}%;background:${cat.color}"></div></div>
-          <div class="top-days">${catLabel}</div>
-        </div>`;
-    }).join('');
-  }
+  const breakdown = EXPENSE_CATEGORIES.map((cat) => {
+    const sum = byCat.get(cat.id);
+    if (!sum) return '';
+    const pct = totals.total ? Math.round((sum / totals.total) * 100) : 0;
+    return `
+      <div class="top-row">
+        <div class="top-flag">${cat.icon}</div>
+        <div class="top-name">${cat.label}</div>
+        <div class="top-bar-track"><div class="top-bar" style="width:${Math.max(2, pct)}%;background:${cat.color}"></div></div>
+        <div class="top-days exp-ils">≈${fmtILS(sum)}</div>
+      </div>`;
+  }).join('');
 
+  // Each row keeps the currency you actually paid in; the shekel
+  // figure rides underneath so the totals are checkable.
   const rows = list.length ? list.map((e) => {
     const cat = catById(e.category);
+    const conv = e.currency === FX.BASE ? ''
+      : typeof e.ils === 'number' ? `<div class="exp-conv">≈${fmtILS(e.ils)}</div>`
+      : '<div class="exp-conv fx-pending">not converted</div>';
     return `
       <div class="exp-row">
         <div class="exp-icon">${cat.icon}</div>
@@ -671,7 +734,7 @@ function openExpensesModal(stay) {
           <div class="exp-note">${e.note || cat.label}</div>
           <div class="exp-date">${e.date ? fmtDate(e.date) : ''}</div>
         </div>
-        <div class="exp-amount">${fmtMoney(e.amount, e.currency)}</div>
+        <div class="exp-amount">${fmtMoney(e.amount, e.currency)}${conv}</div>
         <button class="icon-btn" data-eedit="${e.id}" title="Edit">✏️</button>
         <button class="icon-btn" data-edel="${e.id}" title="Delete">🗑️</button>
       </div>`;
@@ -680,7 +743,8 @@ function openExpensesModal(stay) {
   const m = openModal(`
     <h2>💰 Expenses</h2>
     <p class="muted">${tripTitle(stay)}</p>
-    ${totals.size ? `<div class="exp-total">Total: <b>${totalsLabel(totals)}</b></div>` : ''}
+    ${list.length ? `<div class="exp-total">Total: <b>≈${fmtILS(totals.total)}</b>
+      <span class="muted">· ${sourceLabel(list)}</span></div>` : ''}
     ${breakdown}
     <div class="exp-list">${rows}</div>
     <div class="btn-row">
@@ -719,6 +783,7 @@ function openExpenseForm(stay, exp, opts) {
       <label class="field"><span>Currency</span>
         <select id="exp-cur">${CURRENCIES.map((c) => `<option ${c === defCur ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
     </div>
+    <div id="exp-fx" class="fx-hint"></div>
     <label class="field"><span>Category</span>
       <select id="exp-cat">${EXPENSE_CATEGORIES.map((c) =>
         `<option value="${c.id}" ${exp && exp.category === c.id ? 'selected' : ''}>${c.icon} ${c.label}</option>`).join('')}</select></label>
@@ -730,23 +795,60 @@ function openExpenseForm(stay, exp, opts) {
       <button class="btn btn-secondary" data-act="cancel">Cancel</button>
       <button class="btn btn-primary" data-act="save">Save expense</button>
     </div>`);
+  // Live "what is that in shekels" hint under the amount.
+  const amountEl = m.el.querySelector('#exp-amount');
+  const curEl = m.el.querySelector('#exp-cur');
+  const dateEl = m.el.querySelector('#exp-date');
+  const fxEl = m.el.querySelector('#exp-fx');
+  function updateFxHint() {
+    const amt = parseFloat(amountEl.value);
+    const cur = curEl.value;
+    if (cur === FX.BASE) { fxEl.innerHTML = ''; return; }
+    const r = FX.best(cur, dateEl.value);
+    if (!r) { fxEl.innerHTML = '<span class="muted">No rate for this currency yet.</span>'; return; }
+    const rateTxt = `${r.rate.toLocaleString(undefined, { maximumFractionDigits: 4 })} ₪ per 1 ${cur}`;
+    const approx = r.source === 'fallback' ? ' · offline estimate' : '';
+    fxEl.innerHTML = amt > 0
+      ? `<b>≈${fmtILS(amt * r.rate)}</b> <span class="muted">· ${rateTxt}${approx}</span>`
+      : `<span class="muted">${rateTxt}${approx}</span>`;
+  }
+  amountEl.addEventListener('input', updateFxHint);
+  curEl.addEventListener('change', updateFxHint);
+  dateEl.addEventListener('change', updateFxHint);
+  updateFxHint();
+  // Warm the real rate for this currency/date, then sharpen the hint.
+  FX.resolve(curEl.value, dateEl.value).then(updateFxHint).catch(() => {});
+
   m.el.querySelector('[data-act="cancel"]').onclick = () => { m.close(); if (!globalAdd) openExpensesModal(stay); };
   m.el.querySelector('[data-act="save"]').onclick = () => {
-    const amount = parseFloat(m.el.querySelector('#exp-amount').value);
+    const amount = parseFloat(amountEl.value);
     if (!amount || amount <= 0) { alert('Enter an amount.'); return; }
     const record = {
       stayId: stay ? stay.id : (exp ? exp.stayId : null),
-      date: m.el.querySelector('#exp-date').value || todayISO(),
+      date: dateEl.value || todayISO(),
       category: m.el.querySelector('#exp-cat').value,
       amount,
-      currency: m.el.querySelector('#exp-cur').value,
+      currency: curEl.value,
       note: m.el.querySelector('#exp-note').value.trim(),
     };
-    if (isEdit) Object.assign(exp, record);
-    else state.expenses.push(Object.assign({ id: newId() }, record));
+    // Freeze a conversion straight away from what we already know,
+    // so the expense never lands in the list without a shekel value.
+    const guess = FX.best(record.currency, record.date);
+    if (guess) {
+      record.fxRate = guess.rate;
+      record.fxDate = record.date;
+      record.fxSource = guess.source;
+      record.ils = Math.round(amount * guess.rate * 100) / 100;
+    }
+    let target;
+    if (isEdit) { target = exp; Object.assign(exp, record); }
+    else { target = Object.assign({ id: newId() }, record); state.expenses.push(target); }
     state.profile.lastCurrency = record.currency;
     persist(); renderAll(); m.close();
     if (!globalAdd) openExpensesModal(stay);
+    // Then upgrade to the rate for the expense's own date in the
+    // background; nothing blocks on the network.
+    FX.apply(target).then(() => { persist(); renderAll(); }).catch(() => {});
   };
 }
 
@@ -762,7 +864,7 @@ function renderTrips() {
     return;
   }
   const expChip = (list) => list.length
-    ? `💰 ${totalsLabel(expenseTotals(list))}`
+    ? `💰 ${ilsLabel(list)}`
     : '💰 Add expenses';
   listEl.innerHTML = stays.map((st) => {
     const exps = byStay.get(st.id) || [];
@@ -784,7 +886,7 @@ function renderTrips() {
       <div class="trip-main">
         <div class="trip-country">Other expenses</div>
         <div class="trip-dates">Not linked to any trip</div>
-        <button class="exp-chip" data-exp="_unassigned">💰 ${totalsLabel(expenseTotals(unassigned))}</button>
+        <button class="exp-chip" data-exp="_unassigned">💰 ${ilsLabel(unassigned)}</button>
       </div>
     </div>` : '');
   listEl.querySelectorAll('[data-exp]').forEach((b) => {
@@ -1190,6 +1292,7 @@ function initSettings() {
         if (confirm('Replace all current data with this backup?')) {
           state = imported;
           persist(); renderAll();
+          ensureConversions(); // older backups carry no shekel values
           alert('Backup imported! ✅');
         }
       } catch (err) {
@@ -1264,6 +1367,7 @@ function init() {
     }
   });
   renderAll();
+  ensureConversions();
 }
 
 init();
